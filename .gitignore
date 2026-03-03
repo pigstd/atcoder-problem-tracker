@@ -209,3 +209,6 @@ __marimo__/
 # User groups: keep only the template file in repo
 usergroup/*
 !usergroup/example.json
+
+# cache for data
+cache/

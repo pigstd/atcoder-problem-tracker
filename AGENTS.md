@@ -10,3 +10,9 @@ Before coding, be sure to understand the requirments in the docs/ directory and 
 
 - You shouldn't make any changes to the documentation in the docs/ directory unless explicitly asked to do so.
 - Before you do something command which is irreversible(e.g., deleting files, pushing to main branch), you should ask for confirmation.
+
+### Commit Message
+
+- Commit messages must use the `type: subject` format.
+- Example: `feat: add cache refresh flag`
+- Preferred `type` values: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
