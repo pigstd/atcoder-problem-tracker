@@ -1,16 +1,15 @@
-根据 design.md 中的设计，完成该项目的全部功能（不包括后面的其他设计）。
+接下来完成缓存实现（基于已确认设计）：
 
-实现时必须覆盖以下细节：
-
-- `contest_id` 大小写不敏感比较。
-- “做过”定义为有提交即可，不要求 AC。
-- 找到某个用户做过后，继续检查其他用户；只跳过该用户的剩余提交。
-- API 每次调用后 sleep 1 秒（全局 1 req/s）。
-- 优先调用官方 API，若返回 403 则回退到只读代理继续获取数据。
-- 分页使用 `from_second = max(epoch_second) + 1`，空列表停止。
-- API 请求失败重试；连续 5 次失败则报错并退出。
-- `group` 文件不存在、JSON 非法、`users` 缺失或为空时，报错并退出。
-- 输出格式：
-  - 检查用户前：`checking user <user_id> ...`
-  - 命中用户：`<user_id> done <contest_id>`
-  - 全部未命中：`no users have done <contest_id>`
+- 每个用户使用一个缓存文件：`cache/users/{user_id}.json`。
+- 若 `cache/users/` 目录不存在，程序自动创建。
+- 若某用户缓存文件不存在，程序自动创建该文件并做首次全量初始化。
+- 缓存字段包含：`version`、`user_id`、`last_updated_at`、`next_from_second`、`submissions`。
+- `submissions` 保存 API 返回的完整字段，不做裁剪，不限制缓存大小。
+- 增量更新游标使用 `next_from_second`，按 `from_second = max(epoch_second) + 1` 推进。
+- 记录更新间隔常量：`CACHE_MIN_UPDATE_INTERVAL_SECONDS`（默认 86400 秒）。
+- 当“当前时间 - last_updated_at < 更新间隔”时，本次不更新缓存，直接用本地缓存处理。
+- 当达到更新间隔时，从 `next_from_second` 继续增量拉取并写回缓存。
+- 新增 `--refresh-cache` 参数，强制从 `from_second=0` 全量重建缓存。
+- 程序主流程拆分为两阶段：
+  - 更新缓存阶段
+  - 从缓存处理判定阶段
