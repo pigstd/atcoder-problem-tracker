@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from src.cli import ANSI_GREEN, ANSI_RED, ANSI_RESET, load_group_users, main, run
+from src.cli import ANSI_GREEN, ANSI_RED, ANSI_RESET, load_group_users, main, parse_args, run
 from src.core import cache as cache_store
 from src.core import tracker as tracker_service
 from src.core.errors import TrackerError
@@ -298,9 +298,14 @@ class InputValidationTest(unittest.TestCase):
         self.assertTrue(tracker_service.cache_has_done_contest(cf, cf_submissions, 2065))
         self.assertFalse(tracker_service.cache_has_done_contest(cf, cf_submissions, 2066))
 
+    def test_parse_args_accepts_multiple_contests(self) -> None:
+        args = parse_args(["--oj", "atcoder", "-c", "abc403", "abc404", "-g", "example"])
+
+        self.assertEqual(args.contest, ["abc403", "abc404"])
+
 
 class CliOutputColorTest(unittest.TestCase):
-    def test_run_colors_done_result_but_not_progress_lines(self) -> None:
+    def test_run_colors_multi_contest_results_and_updates_cache_once_per_user(self) -> None:
         class FakeAdapter:
             name = "atcoder"
 
@@ -318,24 +323,26 @@ class CliOutputColorTest(unittest.TestCase):
                     {"submissions": [{"id": 1}]},
                     {"submissions": []},
                 ],
-            ),
+            ) as mock_update_user_cache,
             patch(
                 "src.cli.tracker.cache_has_done_contest",
-                side_effect=[True, False],
+                side_effect=[True, False, False, True],
             ),
             redirect_stdout(stdout),
         ):
-            exit_code = run(["--oj", "atcoder", "-c", "abc403", "-g", "example"])
+            exit_code = run(["--oj", "atcoder", "-c", "abc403", "abc404", "-g", "example"])
 
         self.assertEqual(exit_code, 0)
+        self.assertEqual(mock_update_user_cache.call_count, 2)
         lines = stdout.getvalue().splitlines()
         self.assertEqual(lines[0], "checking user alice ...")
         self.assertEqual(lines[1], "checking user bob ...")
         self.assertEqual(lines[2], f"{ANSI_RED}alice done abc403{ANSI_RESET}")
+        self.assertEqual(lines[3], f"{ANSI_RED}bob done abc404{ANSI_RESET}")
         self.assertNotIn("\033[", lines[0])
         self.assertNotIn("\033[", lines[1])
 
-    def test_run_colors_no_hit_result_in_green(self) -> None:
+    def test_run_colors_no_hit_result_in_green_for_each_contest(self) -> None:
         class FakeAdapter:
             name = "cf"
 
@@ -348,14 +355,20 @@ class CliOutputColorTest(unittest.TestCase):
             patch("src.cli.load_group_users", return_value=["tourist"]),
             patch("src.cli.cache.ensure_cache_dir_exists"),
             patch("src.cli.tracker.update_user_cache", return_value={"submissions": []}),
-            patch("src.cli.tracker.cache_has_done_contest", return_value=False),
+            patch("src.cli.tracker.cache_has_done_contest", side_effect=[False, False]),
             redirect_stdout(stdout),
         ):
-            exit_code = run(["--oj", "cf", "-c", "2065", "-g", "example"])
+            exit_code = run(["--oj", "cf", "-c", "2065", "2066", "-g", "example"])
 
         self.assertEqual(exit_code, 0)
         lines = stdout.getvalue().splitlines()
-        self.assertEqual(lines[-1], f"{ANSI_GREEN}no users have done 2065{ANSI_RESET}")
+        self.assertEqual(lines[-2], f"{ANSI_GREEN}no users have done 2065{ANSI_RESET}")
+        self.assertEqual(lines[-1], f"{ANSI_GREEN}no users have done 2066{ANSI_RESET}")
+
+    def test_run_rejects_non_numeric_cf_contest_in_multi_contest_input(self) -> None:
+        with patch("src.cli.get_adapter", return_value=CodeforcesAdapter()):
+            with self.assertRaises(TrackerError):
+                run(["--oj", "cf", "-c", "2065", "abc403", "-g", "example"])
 
     def test_main_colors_tracker_error_in_red_stderr(self) -> None:
         stderr = io.StringIO()

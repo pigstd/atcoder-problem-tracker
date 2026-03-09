@@ -1,5 +1,5 @@
 # oj-problem-tracker
-A tool for ACM team coach to check whether team members have submitted in a target contest.
+A tool for ACM team coach to check whether team members have submitted in one or more target contests.
 
 Supported OJ: AtCoder and Codeforces.
 
@@ -20,28 +20,28 @@ Create a group file in `usergroup/`, for example `usergroup/example.json`:
 
 ## Usage
 
-Check AtCoder users in a group for contest `abc403`:
+Check AtCoder users in a group for contests `abc403` and `abc404`:
 
 ```bash
-python3 oj-problem-tracker.py --oj atcoder -c abc403 -g example
+python3 oj-problem-tracker.py --oj atcoder -c abc403 abc404 -g example
 ```
 
-Check Codeforces users in a group for contest `2065`:
+Check Codeforces users in a group for contests `2065` and `2066`:
 
 ```bash
-python3 oj-problem-tracker.py --oj cf -c 2065 -g example
+python3 oj-problem-tracker.py --oj cf -c 2065 2066 -g example
 ```
 
 Can also used in gym contests(e.g. gym104059):
 
 ```bash
-python3 oj-problem-tracker.py --oj cf -c 104059 -g example
+python3 oj-problem-tracker.py --oj cf -c 104059 104060 -g example
 ```
 
 Force refresh cache:
 
 ```bash
-python3 oj-problem-tracker.py --oj atcoder -c abc403 -g example --refresh-cache
+python3 oj-problem-tracker.py --oj atcoder -c abc403 abc404 -g example --refresh-cache
 ```
 
 Show command help:
@@ -77,14 +77,15 @@ Request pacing:
   - AtCoder updates from `next_from_second`.
   - Codeforces performs full refetch from page 1.
 - `--refresh-cache` always forces refresh.
+- When checking multiple contests, each user's cache is still updated only once per run.
 
 ## Output
 
 - Per user start: `checking user <user_id> ...`
 - Cache update in progress: `updating cache for <user_id> ...`
 - Cache hit without update: `cache hit, skip update for <user_id>`
-- Contest hit: `<user_id> done <contest_id>`
-- No hit in whole group: `no users have done <contest_id>`
+- For each contest, a hit is printed as `<user_id> done <contest_id>`
+- If nobody in the group has done a contest, print `no users have done <contest_id>`
 
 ## Test
 

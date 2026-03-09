@@ -6,7 +6,7 @@
 
 1. 按 group 读取目标用户列表。
 2. 先更新本地缓存。
-3. 再只基于缓存判断是否做过目标比赛。
+3. 再只基于缓存判断是否做过一个或多个目标比赛。
 
 差异点只在 OJ 适配层：
 
@@ -20,26 +20,26 @@
 AtCoder：
 
 ```bash
-python3 oj-problem-tracker.py --oj atcoder -c abc403 -g example
+python3 oj-problem-tracker.py --oj atcoder -c abc403 abc404 -g example
 ```
 
 Codeforces：
 
 ```bash
-python3 oj-problem-tracker.py --oj cf -c 2065 -g example
+python3 oj-problem-tracker.py --oj cf -c 2065 2066 -g example
 ```
 
 强制刷新缓存（忽略 24 小时更新间隔）：
 
 ```bash
-python3 oj-problem-tracker.py --oj cf -c 2065 -g example --refresh-cache
+python3 oj-problem-tracker.py --oj cf -c 2065 2066 -g example --refresh-cache
 ```
 
 参数约束：
 
 - `--oj`：必填，取值 `atcoder` 或 `cf`。
-- `-c/--contest`：必填。
-- 当 `--oj cf` 时，`--contest` 必须是纯数字（表示 `contestId`）。
+- `-c/--contest`：必填，支持一个或多个比赛参数，例如 `-c abc403 abc404`。
+- 当 `--oj cf` 时，`--contest` 中的每个值都必须是纯数字（表示 `contestId`）。
 
 ### group 文件格式（不兼容旧版）
 
@@ -75,16 +75,17 @@ python3 oj-problem-tracker.py --oj cf -c 2065 -g example --refresh-cache
 
 ### 阶段 2：比赛命中检查
 
-不再请求网络，只扫描本地缓存 `submissions`：
+不再请求网络，只扫描本地缓存 `submissions`。先完成所有用户的缓存更新，再按命令行给出的 contest 顺序逐个检查：
 
 - AtCoder：`submission.contest_id.lower() == contest.lower()`。
 - Codeforces：`submission.contestId == int(contest)`。
 
-输出逻辑保持一致：
+输出逻辑：
 
 - `checking user <user_id> ...`
-- `<user_id> done <contest_id>`
-- `no users have done <contest_id>`
+- 对每个 `contest_id`，命中用户输出 `<user_id> done <contest_id>`
+- 若某个 `contest_id` 无人命中，输出 `no users have done <contest_id>`
+- 多个比赛共用同一轮缓存更新，不会重复拉取同一用户缓存
 
 ## OJ 适配实现细节
 
@@ -211,6 +212,11 @@ Codeforces 缓存示例：
 - `update_submissions(user_id: str, existing_cache: dict | None, refresh_cache: bool) -> dict`
 - `submission_matches_contest(submission: dict, contest: str | int) -> bool`
 
+说明：
+
+- OJ 适配层仍按“单个 contest”提供 `validate_contest` 和 `submission_matches_contest`。
+- 多个 contest 的参数解析、批量校验和遍历输出由入口层负责。
+
 新增 OJ 时的标准步骤：
 
 1. 新增 `src/oj/<oj>.py` 并实现上述接口。
@@ -246,6 +252,6 @@ Codeforces 缓存示例：
 ## 异常处理
 
 - group 文件不存在、JSON 非法、字段类型不对、选中 OJ 用户列表为空：报错并退出。
-- `--oj cf` 但 `--contest` 非纯数字：报错并退出。
+- `--oj cf` 但 `--contest` 中任一值非纯数字：报错并退出。
 - 缓存文件损坏或字段不合法：报错并退出。
 - API 连续 5 次失败：报错并退出，错误信息包含失败原因。

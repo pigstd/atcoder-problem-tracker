@@ -18,7 +18,7 @@ ANSI_RESET = "\033[0m"
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Check whether users in a group have submissions in a target contest."
+        description="Check whether users in a group have submissions in one or more target contests."
     )
     parser.add_argument(
         "--oj",
@@ -30,7 +30,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-c",
         "--contest",
         required=True,
-        help="Contest ID to check",
+        nargs="+",
+        help="One or more contest IDs to check",
     )
     parser.add_argument(
         "-g",
@@ -98,7 +99,7 @@ def print_colored(text: str, color: str, *, file: TextIO | None = None) -> None:
 def run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     adapter = get_adapter(args.oj)
-    target_contest = adapter.validate_contest(args.contest)
+    target_contests = [adapter.validate_contest(contest) for contest in args.contest]
     users = load_group_users(args.group, args.oj)
     cache.ensure_cache_dir_exists(adapter.name)
 
@@ -107,14 +108,15 @@ def run(argv: list[str] | None = None) -> int:
         print(f"checking user {user_id} ...", flush=True)
         user_caches[user_id] = tracker.update_user_cache(adapter, user_id, args.refresh_cache)
 
-    found_any = False
-    for user_id in users:
-        if tracker.cache_has_done_contest(adapter, user_caches[user_id]["submissions"], target_contest):
-            print_colored(f"{user_id} done {args.contest}", ANSI_RED)
-            found_any = True
+    for raw_contest, target_contest in zip(args.contest, target_contests):
+        found_any = False
+        for user_id in users:
+            if tracker.cache_has_done_contest(adapter, user_caches[user_id]["submissions"], target_contest):
+                print_colored(f"{user_id} done {raw_contest}", ANSI_RED)
+                found_any = True
 
-    if not found_any:
-        print_colored(f"no users have done {args.contest}", ANSI_GREEN)
+        if not found_any:
+            print_colored(f"no users have done {raw_contest}", ANSI_GREEN)
 
     return 0
 
