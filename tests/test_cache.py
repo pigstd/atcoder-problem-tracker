@@ -1,11 +1,14 @@
 import datetime
+import io
 import json
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
-from src.cli import load_group_users
+from src.cli import ANSI_GREEN, ANSI_RED, ANSI_RESET, load_group_users, main, run
 from src.core import cache as cache_store
 from src.core import tracker as tracker_service
 from src.core.errors import TrackerError
@@ -294,6 +297,73 @@ class InputValidationTest(unittest.TestCase):
         )
         self.assertTrue(tracker_service.cache_has_done_contest(cf, cf_submissions, 2065))
         self.assertFalse(tracker_service.cache_has_done_contest(cf, cf_submissions, 2066))
+
+
+class CliOutputColorTest(unittest.TestCase):
+    def test_run_colors_done_result_but_not_progress_lines(self) -> None:
+        class FakeAdapter:
+            name = "atcoder"
+
+            def validate_contest(self, contest: str) -> str:
+                return contest
+
+        stdout = io.StringIO()
+        with (
+            patch("src.cli.get_adapter", return_value=FakeAdapter()),
+            patch("src.cli.load_group_users", return_value=["alice", "bob"]),
+            patch("src.cli.cache.ensure_cache_dir_exists"),
+            patch(
+                "src.cli.tracker.update_user_cache",
+                side_effect=[
+                    {"submissions": [{"id": 1}]},
+                    {"submissions": []},
+                ],
+            ),
+            patch(
+                "src.cli.tracker.cache_has_done_contest",
+                side_effect=[True, False],
+            ),
+            redirect_stdout(stdout),
+        ):
+            exit_code = run(["--oj", "atcoder", "-c", "abc403", "-g", "example"])
+
+        self.assertEqual(exit_code, 0)
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(lines[0], "checking user alice ...")
+        self.assertEqual(lines[1], "checking user bob ...")
+        self.assertEqual(lines[2], f"{ANSI_RED}alice done abc403{ANSI_RESET}")
+        self.assertNotIn("\033[", lines[0])
+        self.assertNotIn("\033[", lines[1])
+
+    def test_run_colors_no_hit_result_in_green(self) -> None:
+        class FakeAdapter:
+            name = "cf"
+
+            def validate_contest(self, contest: str) -> int:
+                return int(contest)
+
+        stdout = io.StringIO()
+        with (
+            patch("src.cli.get_adapter", return_value=FakeAdapter()),
+            patch("src.cli.load_group_users", return_value=["tourist"]),
+            patch("src.cli.cache.ensure_cache_dir_exists"),
+            patch("src.cli.tracker.update_user_cache", return_value={"submissions": []}),
+            patch("src.cli.tracker.cache_has_done_contest", return_value=False),
+            redirect_stdout(stdout),
+        ):
+            exit_code = run(["--oj", "cf", "-c", "2065", "-g", "example"])
+
+        self.assertEqual(exit_code, 0)
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(lines[-1], f"{ANSI_GREEN}no users have done 2065{ANSI_RESET}")
+
+    def test_main_colors_tracker_error_in_red_stderr(self) -> None:
+        stderr = io.StringIO()
+        with patch("src.cli.run", side_effect=TrackerError("boom")), redirect_stderr(stderr):
+            exit_code = main()
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stderr.getvalue(), f"{ANSI_RED}error: boom{ANSI_RESET}\n")
 
 
 if __name__ == "__main__":

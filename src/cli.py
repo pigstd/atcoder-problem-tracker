@@ -4,12 +4,16 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from src.core import cache
 from src.core import tracker
 from src.core.errors import TrackerError
 from src.oj.registry import available_oj_names, get_adapter
+
+ANSI_RED = "\033[31m"
+ANSI_GREEN = "\033[32m"
+ANSI_RESET = "\033[0m"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -83,6 +87,14 @@ def load_group_users(group_name: str, oj: str) -> list[str]:
     return users
 
 
+def colorize(text: str, color: str) -> str:
+    return f"{color}{text}{ANSI_RESET}"
+
+
+def print_colored(text: str, color: str, *, file: TextIO | None = None) -> None:
+    print(colorize(text, color), file=file, flush=True)
+
+
 def run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     adapter = get_adapter(args.oj)
@@ -98,11 +110,11 @@ def run(argv: list[str] | None = None) -> int:
     found_any = False
     for user_id in users:
         if tracker.cache_has_done_contest(adapter, user_caches[user_id]["submissions"], target_contest):
-            print(f"{user_id} done {args.contest}")
+            print_colored(f"{user_id} done {args.contest}", ANSI_RED)
             found_any = True
 
     if not found_any:
-        print(f"no users have done {args.contest}")
+        print_colored(f"no users have done {args.contest}", ANSI_GREEN)
 
     return 0
 
@@ -111,5 +123,5 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(argv)
     except TrackerError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print_colored(f"error: {exc}", ANSI_RED, file=sys.stderr)
         return 1
