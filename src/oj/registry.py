@@ -13,10 +13,12 @@ _ADAPTER_FACTORIES = {
 
 
 def available_oj_names() -> list[str]:
+    """Return the supported OJ names in stable CLI display order."""
     return sorted(_ADAPTER_FACTORIES.keys())
 
 
 def get_adapter(oj: str) -> OJAdapter:
+    """Instantiate the adapter registered for the requested OJ name."""
     factory = _ADAPTER_FACTORIES.get(oj)
     if factory is None:
         raise TrackerError(f"unsupported oj: {oj}")

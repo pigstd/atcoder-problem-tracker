@@ -7,6 +7,7 @@ from src.oj.base import ContestKey, OJAdapter
 
 
 def update_user_cache(adapter: OJAdapter, user_id: str, refresh_cache: bool) -> dict[str, Any]:
+    """Load, refresh, and persist one user's cache according to refresh policy."""
     existing_cache = cache.load_user_cache(adapter.name, user_id, adapter)
 
     if (
@@ -37,6 +38,7 @@ def cache_has_done_contest(
     submissions: list[Any],
     target_contest: ContestKey,
 ) -> bool:
+    """Return whether any cached submission belongs to the target contest."""
     return any(
         adapter.submission_matches_contest(submission, target_contest) for submission in submissions
     )

@@ -17,6 +17,7 @@ ANSI_RESET = "\033[0m"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for OJ, contests, group, and cache refresh behavior."""
     parser = argparse.ArgumentParser(
         description="Check whether users in a group have submissions in one or more target contests."
     )
@@ -48,6 +49,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _validate_group_users(data: Any, group_file: Path) -> dict[str, list[str]]:
+    """Validate the per-OJ user lists loaded from a group JSON file."""
     if not isinstance(data, dict):
         raise TrackerError(f"invalid group format in {group_file}: root must be an object")
 
@@ -68,6 +70,7 @@ def _validate_group_users(data: Any, group_file: Path) -> dict[str, list[str]]:
 
 
 def load_group_users(group_name: str, oj: str) -> list[str]:
+    """Load and validate the selected OJ user list from a group file."""
     group_file = Path("usergroup") / f"{group_name}.json"
     if not group_file.exists():
         raise TrackerError(f"group file not found: {group_file}")
@@ -89,14 +92,17 @@ def load_group_users(group_name: str, oj: str) -> list[str]:
 
 
 def colorize(text: str, color: str) -> str:
+    """Wrap a text line with an ANSI color code and trailing reset sequence."""
     return f"{color}{text}{ANSI_RESET}"
 
 
 def print_colored(text: str, color: str, *, file: TextIO | None = None) -> None:
+    """Print a single colored line to stdout or a provided stream."""
     print(colorize(text, color), file=file, flush=True)
 
 
 def run(argv: list[str] | None = None) -> int:
+    """Run the CLI workflow by refreshing caches once and checking each requested contest."""
     args = parse_args(argv)
     adapter = get_adapter(args.oj)
     target_contests = [adapter.validate_contest(contest) for contest in args.contest]
@@ -122,6 +128,7 @@ def run(argv: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the CLI and translate domain errors into a colored non-zero exit."""
     try:
         return run(argv)
     except TrackerError as exc:

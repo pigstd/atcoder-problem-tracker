@@ -21,15 +21,19 @@ USER_AGENT = "oj-problem-tracker/1.0 (+https://github.com/)"
 
 
 class AtCoderAdapter(OJAdapter):
+    """Adapter for AtCoder submission fetching, caching, and contest matching."""
     name = "atcoder"
 
     def __init__(self) -> None:
+        """Track whether the direct API should be bypassed in favor of the proxy."""
         self._direct_api_blocked = False
 
     def validate_contest(self, contest: str) -> ContestKey:
+        """Return the AtCoder contest ID unchanged."""
         return contest
 
     def validate_cache_fields(self, cache_data: dict[str, Any], cache_file: Path) -> None:
+        """Ensure AtCoder caches store a valid incremental pagination cursor."""
         next_from_second = cache_data.get("next_from_second")
         if not isinstance(next_from_second, int) or next_from_second < 0:
             raise TrackerError(
@@ -43,6 +47,7 @@ class AtCoderAdapter(OJAdapter):
         existing_cache: dict[str, Any] | None,
         refresh_cache: bool,
     ) -> dict[str, Any]:
+        """Fetch new AtCoder submissions and merge them into the stored cache payload."""
         should_full_rebuild = refresh_cache or existing_cache is None
 
         if should_full_rebuild:
@@ -68,6 +73,7 @@ class AtCoderAdapter(OJAdapter):
         }
 
     def submission_matches_contest(self, submission: Any, contest: ContestKey) -> bool:
+        """Return whether a submission belongs to the requested AtCoder contest."""
         if not isinstance(contest, str):
             raise TrackerError("internal error: atcoder target contest must be string")
 
@@ -84,6 +90,7 @@ class AtCoderAdapter(OJAdapter):
         merged_submissions: list[Any],
         known_submission_ids: set[int],
     ) -> int:
+        """Incrementally fetch pages until exhaustion and return the next cursor."""
         from_second = initial_from_second
 
         while True:
@@ -104,6 +111,7 @@ class AtCoderAdapter(OJAdapter):
             from_second = self._extract_next_from_second(user_id, submissions)
 
     def _fetch_submissions_with_retry(self, user_id: str, from_second: int) -> list[dict[str, Any]]:
+        """Retry a paged AtCoder request until success or the failure limit is reached."""
         consecutive_failures = 0
         last_error: str | None = None
 
@@ -134,6 +142,7 @@ class AtCoderAdapter(OJAdapter):
         )
 
     def _fetch_submissions_once(self, user_id: str, from_second: int) -> list[dict[str, Any]]:
+        """Fetch one AtCoder page, falling back to the proxy after a 403 response."""
         params = urllib.parse.urlencode({"user": user_id, "from_second": str(from_second)})
         direct_url = f"{API_BASE}?{params}"
         proxy_url = f"{API_PROXY_PREFIX}?{params}"
@@ -160,6 +169,7 @@ class AtCoderAdapter(OJAdapter):
 
     @staticmethod
     def _parse_submissions_payload(text: str) -> list[dict[str, Any]]:
+        """Parse either raw JSON or proxy-wrapped Markdown into a submission list."""
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:
@@ -175,6 +185,7 @@ class AtCoderAdapter(OJAdapter):
 
     @staticmethod
     def _extract_next_from_second(user_id: str, submissions: list[dict[str, Any]]) -> int:
+        """Compute the next incremental cursor from the newest fetched submission."""
         epoch_seconds = [
             submission.get("epoch_second")
             for submission in submissions

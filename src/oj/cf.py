@@ -20,14 +20,17 @@ USER_AGENT = "oj-problem-tracker/1.0 (+https://github.com/)"
 
 
 class CodeforcesAdapter(OJAdapter):
+    """Adapter for Codeforces submission fetching, caching, and contest matching."""
     name = "cf"
 
     def validate_contest(self, contest: str) -> ContestKey:
+        """Validate that a Codeforces contest ID is numeric and normalize it to int."""
         if not contest.isdigit():
             raise TrackerError("for --oj cf, --contest must be a pure numeric contestId")
         return int(contest)
 
     def validate_cache_fields(self, cache_data: dict[str, Any], cache_file: Path) -> None:
+        """Accept current Codeforces caches and guard legacy next_from_second values if present."""
         if "next_from_second" not in cache_data:
             return
 
@@ -44,11 +47,13 @@ class CodeforcesAdapter(OJAdapter):
         existing_cache: dict[str, Any] | None,
         refresh_cache: bool,
     ) -> dict[str, Any]:
+        """Rebuild the Codeforces submission payload from a fresh full fetch."""
         del existing_cache
         del refresh_cache
         return {"submissions": self._fetch_full_submissions(user_id)}
 
     def submission_matches_contest(self, submission: Any, contest: ContestKey) -> bool:
+        """Return whether a submission belongs to the requested Codeforces contest."""
         if not isinstance(contest, int):
             raise TrackerError("internal error: cf target contest must be int")
 
@@ -59,6 +64,7 @@ class CodeforcesAdapter(OJAdapter):
         )
 
     def _fetch_full_submissions(self, handle: str) -> list[Any]:
+        """Fetch every submission page for a handle and deduplicate by submission ID."""
         all_submissions: list[Any] = []
         known_submission_ids: set[int] = set()
         from_index = 1
@@ -91,6 +97,7 @@ class CodeforcesAdapter(OJAdapter):
         from_index: int,
         count: int,
     ) -> list[dict[str, Any]]:
+        """Retry a paged Codeforces request until success or the failure limit is reached."""
         consecutive_failures = 0
         last_error: str | None = None
 
@@ -121,6 +128,7 @@ class CodeforcesAdapter(OJAdapter):
         )
 
     def _fetch_status_page_once(self, handle: str, from_index: int, count: int) -> list[dict[str, Any]]:
+        """Fetch and validate a single Codeforces status page."""
         params = urllib.parse.urlencode(
             {
                 "handle": handle,

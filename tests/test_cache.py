@@ -17,6 +17,7 @@ from src.oj.cf import CodeforcesAdapter
 
 
 def _iso_utc_hours_ago(hours: int) -> str:
+    """Return a UTC timestamp string shifted backward by the requested hours."""
     timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
     return timestamp.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -28,6 +29,7 @@ def _cache_payload(
     submissions: list[dict],
     next_from_second: int | None = None,
 ):
+    """Build a cache payload fixture matching the project's on-disk format."""
     payload = {
         "version": cache_store.CACHE_VERSION,
         "oj": oj,
@@ -41,7 +43,10 @@ def _cache_payload(
 
 
 class CacheBehaviorTest(unittest.TestCase):
+    """Verify cache refresh behavior for AtCoder and Codeforces adapters."""
+
     def setUp(self) -> None:
+        """Create isolated cache roots and adapter instances for each test."""
         self.tmpdir = tempfile.TemporaryDirectory()
         self.original_cache_root = cache_store.CACHE_ROOT
         cache_store.CACHE_ROOT = Path(self.tmpdir.name) / "cache"
@@ -53,10 +58,12 @@ class CacheBehaviorTest(unittest.TestCase):
         cache_store.ensure_cache_dir_exists("cf")
 
     def tearDown(self) -> None:
+        """Restore the original cache root and remove temporary files."""
         cache_store.CACHE_ROOT = self.original_cache_root
         self.tmpdir.cleanup()
 
     def test_atcoder_create_cache_for_new_user(self) -> None:
+        """Verify a missing AtCoder cache is created from fetched submissions."""
         def fake_fetch(user_id: str, from_second: int):
             self.assertEqual(user_id, "alice")
             if from_second == 0:
@@ -73,6 +80,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertTrue(cache_store.get_cache_file_path("atcoder", "alice").exists())
 
     def test_atcoder_skip_update_within_interval(self) -> None:
+        """Verify fresh AtCoder caches skip network refresh and reuse local data."""
         payload = _cache_payload(
             oj="atcoder",
             user_id="bob",
@@ -96,6 +104,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertEqual(len(cache["submissions"]), 1)
 
     def test_atcoder_incremental_update_and_dedup(self) -> None:
+        """Verify stale AtCoder caches merge new pages while deduplicating submission IDs."""
         payload = _cache_payload(
             oj="atcoder",
             user_id="carol",
@@ -123,6 +132,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertEqual([s["id"] for s in cache["submissions"]], [1, 2])
 
     def test_atcoder_refresh_cache_rebuilds_from_zero(self) -> None:
+        """Verify refresh mode rebuilds an AtCoder cache from the initial cursor."""
         payload = _cache_payload(
             oj="atcoder",
             user_id="dave",
@@ -147,6 +157,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertEqual([s["id"] for s in cache["submissions"]], [101])
 
     def test_cf_create_cache_for_new_user(self) -> None:
+        """Verify a missing Codeforces cache is created from the first fetched page."""
         calls: list[tuple[int, int]] = []
 
         def fake_fetch(handle: str, from_index: int, count: int):
@@ -165,6 +176,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertTrue(cache_store.get_cache_file_path("cf", "tourist").exists())
 
     def test_cf_skip_update_within_interval(self) -> None:
+        """Verify fresh Codeforces caches skip network refresh and reuse local data."""
         payload = _cache_payload(
             oj="cf",
             user_id="petr",
@@ -186,6 +198,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertEqual([s["id"] for s in cache["submissions"]], [9])
 
     def test_cf_stale_cache_full_refetch(self) -> None:
+        """Verify stale Codeforces caches are rebuilt from a full refetch."""
         payload = _cache_payload(
             oj="cf",
             user_id="neal",
@@ -205,6 +218,7 @@ class CacheBehaviorTest(unittest.TestCase):
         self.assertEqual([s["id"] for s in cache["submissions"]], [2])
 
     def test_cf_refresh_cache_forces_refetch(self) -> None:
+        """Verify refresh mode always triggers a full Codeforces refetch."""
         payload = _cache_payload(
             oj="cf",
             user_id="benq",
@@ -229,17 +243,22 @@ class CacheBehaviorTest(unittest.TestCase):
 
 
 class InputValidationTest(unittest.TestCase):
+    """Verify CLI-facing validation and contest matching helpers."""
+
     def setUp(self) -> None:
+        """Create an isolated working directory with a temporary usergroup folder."""
         self.tmpdir = tempfile.TemporaryDirectory()
         self.original_cwd = Path.cwd()
         os.chdir(self.tmpdir.name)
         Path("usergroup").mkdir(parents=True, exist_ok=True)
 
     def tearDown(self) -> None:
+        """Restore the original working directory and remove temporary files."""
         os.chdir(self.original_cwd)
         self.tmpdir.cleanup()
 
     def test_load_group_users_new_format(self) -> None:
+        """Verify the current group file format loads the requested OJ users."""
         group_file = Path("usergroup") / "example.json"
         group_file.write_text(
             json.dumps({"atcoder": ["alice"], "cf": ["tourist", "Petr"]}),
@@ -253,6 +272,7 @@ class InputValidationTest(unittest.TestCase):
         self.assertEqual(cf_users, ["tourist", "Petr"])
 
     def test_load_group_users_rejects_old_users_field(self) -> None:
+        """Verify the legacy single-list group format is rejected."""
         group_file = Path("usergroup") / "legacy.json"
         group_file.write_text(json.dumps({"users": ["alice"]}), encoding="utf-8")
 
@@ -260,6 +280,7 @@ class InputValidationTest(unittest.TestCase):
             load_group_users("legacy", "atcoder")
 
     def test_load_group_users_rejects_empty_selected_oj_users(self) -> None:
+        """Verify empty user lists for the selected OJ are rejected."""
         group_file = Path("usergroup") / "empty.json"
         group_file.write_text(
             json.dumps({"atcoder": [], "cf": ["tourist"]}),
@@ -270,6 +291,7 @@ class InputValidationTest(unittest.TestCase):
             load_group_users("empty", "atcoder")
 
     def test_validate_contest(self) -> None:
+        """Verify each adapter normalizes valid contests and rejects invalid ones."""
         atcoder = AtCoderAdapter()
         cf = CodeforcesAdapter()
 
@@ -279,6 +301,7 @@ class InputValidationTest(unittest.TestCase):
             cf.validate_contest("abc403")
 
     def test_cache_has_done_contest_for_both_oj(self) -> None:
+        """Verify contest matching works for both AtCoder and Codeforces submissions."""
         atcoder = AtCoderAdapter()
         cf = CodeforcesAdapter()
 
@@ -299,13 +322,17 @@ class InputValidationTest(unittest.TestCase):
         self.assertFalse(tracker_service.cache_has_done_contest(cf, cf_submissions, 2066))
 
     def test_parse_args_accepts_multiple_contests(self) -> None:
+        """Verify argparse collects multiple contest values from a single -c option."""
         args = parse_args(["--oj", "atcoder", "-c", "abc403", "abc404", "-g", "example"])
 
         self.assertEqual(args.contest, ["abc403", "abc404"])
 
 
 class CliOutputColorTest(unittest.TestCase):
+    """Verify colored CLI output and multi-contest orchestration behavior."""
+
     def test_run_colors_multi_contest_results_and_updates_cache_once_per_user(self) -> None:
+        """Verify hits are colored per contest while each user cache is updated once."""
         class FakeAdapter:
             name = "atcoder"
 
@@ -343,6 +370,7 @@ class CliOutputColorTest(unittest.TestCase):
         self.assertNotIn("\033[", lines[1])
 
     def test_run_colors_no_hit_result_in_green_for_each_contest(self) -> None:
+        """Verify each contest without hits emits its own green status line."""
         class FakeAdapter:
             name = "cf"
 
@@ -366,11 +394,13 @@ class CliOutputColorTest(unittest.TestCase):
         self.assertEqual(lines[-1], f"{ANSI_GREEN}no users have done 2066{ANSI_RESET}")
 
     def test_run_rejects_non_numeric_cf_contest_in_multi_contest_input(self) -> None:
+        """Verify Codeforces multi-contest input rejects any non-numeric contest ID."""
         with patch("src.cli.get_adapter", return_value=CodeforcesAdapter()):
             with self.assertRaises(TrackerError):
                 run(["--oj", "cf", "-c", "2065", "abc403", "-g", "example"])
 
     def test_main_colors_tracker_error_in_red_stderr(self) -> None:
+        """Verify CLI domain errors are rendered to stderr using the error color."""
         stderr = io.StringIO()
         with patch("src.cli.run", side_effect=TrackerError("boom")), redirect_stderr(stderr):
             exit_code = main()
